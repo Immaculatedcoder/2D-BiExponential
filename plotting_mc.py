@@ -40,6 +40,29 @@ THETA_NAMES = [
 
 
 # ============================================================
+# Default solver colors
+#
+# Solver 1 -> blue
+# Solver 2 -> orange
+#
+# Additional solvers, if ever added, receive additional colors.
+# ============================================================
+
+DEFAULT_SOLVER_COLORS = [
+    "tab:blue",
+    "tab:orange",
+    "tab:green",
+    "tab:red",
+    "tab:purple",
+    "tab:brown",
+    "tab:pink",
+    "tab:gray",
+    "tab:olive",
+    "tab:cyan",
+]
+
+
+# ============================================================
 # Helper: format theta0 for figure titles
 # ============================================================
 
@@ -99,6 +122,40 @@ def clean_values(values):
 
 
 # ============================================================
+# Helper: assign solver colors
+# ============================================================
+
+def build_solver_colors(solver_names):
+    """
+    Assign one consistent color to every solver.
+
+    Example for two solvers:
+
+        SciPy              -> tab:blue
+        AHU-VarPro-Saddle  -> tab:orange
+
+    The same color is then used for both:
+
+        1. histogram
+        2. mean vertical line
+    """
+
+    solver_colors = {}
+
+    for i, solver_name in enumerate(
+        solver_names
+    ):
+
+        solver_colors[solver_name] = (
+            DEFAULT_SOLVER_COLORS[
+                i % len(DEFAULT_SOLVER_COLORS)
+            ]
+        )
+
+    return solver_colors
+
+
+# ============================================================
 # Plot distribution for ONE parameter and TWO OR MORE solvers
 # ============================================================
 
@@ -123,12 +180,12 @@ def plot_parameter_comparison(
         Example:
 
         {
-            "SciPy VarPro": {
+            "SciPy": {
                 "T11": [...],
                 ...
             },
 
-            "Preconditioned Saddle": {
+            "AHU-VarPro-Saddle": {
                 "T11": [...],
                 ...
             }
@@ -144,7 +201,7 @@ def plot_parameter_comparison(
         Initial nonlinear parameter vector.
 
     bins : int
-        Number of common histogram bins.
+        Maximum number of common histogram bins.
 
     output_dir : str or Path or None
         Folder where figure should be saved.
@@ -160,46 +217,64 @@ def plot_parameter_comparison(
         the number of successful realizations may differ.
     """
 
+    # ========================================================
+    # Basic validation
+    # ========================================================
+
     if parameter_name not in PARAMETER_NAMES:
+
         raise ValueError(
             f"Unknown parameter: {parameter_name}"
         )
 
+
     if len(results_by_solver) == 0:
+
         raise ValueError(
             "results_by_solver cannot be empty."
         )
+
 
     label = PARAMETER_LABELS.get(
         parameter_name,
         parameter_name
     )
 
-    # --------------------------------------------------------
+
+    # ========================================================
     # Collect finite results from every solver
-    # --------------------------------------------------------
+    # ========================================================
 
     cleaned = {}
 
     all_values = []
 
-    for solver_name, results in results_by_solver.items():
+
+    for solver_name, results in (
+        results_by_solver.items()
+    ):
+
 
         if parameter_name not in results:
+
             raise KeyError(
                 f"{solver_name} is missing "
                 f"parameter {parameter_name}."
             )
 
+
         values = clean_values(
             results[parameter_name]
         )
 
+
         if values.size == 0:
+
             raise ValueError(
                 f"No finite {parameter_name} estimates "
                 f"for solver {solver_name}."
             )
+
 
         cleaned[solver_name] = values
 
@@ -207,40 +282,90 @@ def plot_parameter_comparison(
             values
         )
 
-    # --------------------------------------------------------
-    # Use exactly the SAME bins for every solver
+
+    # ========================================================
+    # Use exactly the SAME histogram bins for every solver
     #
-    # This is very important for a fair visual comparison.
-    # --------------------------------------------------------
+    # This is important for a fair visual comparison.
+    # ========================================================
 
     combined_values = np.concatenate(
         all_values
     )
 
-    bin_edges = np.histogram_bin_edges(
-        combined_values,
-        bins=bins
-    )
 
     # --------------------------------------------------------
-    # Figure
+    # Adaptive number of bins
+    #
+    # For small Monte Carlo samples we do not want to force
+    # 30 bins onto only a handful of observations.
+    #
+    # For large Monte Carlo experiments, "bins" acts as the
+    # requested maximum.
     # --------------------------------------------------------
+
+    effective_bins = min(
+        bins,
+        max(
+            5,
+            int(
+                np.sqrt(
+                    len(combined_values)
+                )
+            )
+        )
+    )
+
+
+    bin_edges = np.histogram_bin_edges(
+        combined_values,
+        bins=effective_bins
+    )
+
+
+    # ========================================================
+    # Assign consistent solver colors
+    # ========================================================
+
+    solver_colors = build_solver_colors(
+        cleaned.keys()
+    )
+
+
+    # ========================================================
+    # Figure
+    # ========================================================
 
     fig, ax = plt.subplots(
         figsize=(9, 6)
     )
 
-    # --------------------------------------------------------
-    # Plot each solver distribution
-    # --------------------------------------------------------
 
-    for solver_name, values in cleaned.items():
+    # ========================================================
+    # Plot each solver distribution
+    #
+    # SciPy              -> blue
+    # AHU-VarPro-Saddle  -> orange
+    #
+    # assuming they are passed in that order.
+    # ========================================================
+
+    for solver_name, values in (
+        cleaned.items()
+    ):
+
+
+        color = solver_colors[
+            solver_name
+        ]
+
 
         ax.hist(
             values,
             bins=bin_edges,
             density=density,
             alpha=0.45,
+            color=color,
             edgecolor="black",
             label=(
                 f"{solver_name} "
@@ -248,51 +373,76 @@ def plot_parameter_comparison(
             )
         )
 
-    # --------------------------------------------------------
+
+    # ========================================================
     # True parameter
-    # --------------------------------------------------------
+    #
+    # Ground truth is ALWAYS shown in BLACK.
+    #
+    # This makes it visually independent of either solver.
+    # ========================================================
 
     ax.axvline(
         true_value,
         linewidth=2.5,
         linestyle="-",
+        color="black",
         label=(
             f"True {parameter_name} "
             f"= {true_value:.8g}"
         )
     )
 
-    # --------------------------------------------------------
-    # Mean from every solver
-    # --------------------------------------------------------
 
-    for solver_name, values in cleaned.items():
+    # ========================================================
+    # Mean from every solver
+    #
+    # Mean line uses the SAME color as its histogram:
+    #
+    # SciPy mean              -> blue dashed
+    # AHU-VarPro-Saddle mean  -> orange dashed
+    # ========================================================
+
+    for solver_name, values in (
+        cleaned.items()
+    ):
+
 
         mean_value = np.mean(
             values
         )
 
+
+        color = solver_colors[
+            solver_name
+        ]
+
+
         ax.axvline(
             mean_value,
-            linewidth=1.8,
+            linewidth=2.2,
             linestyle="--",
+            color=color,
             label=(
                 f"{solver_name} mean "
                 f"= {mean_value:.8g}"
             )
         )
 
-    # --------------------------------------------------------
+
+    # ========================================================
     # Title
-    # --------------------------------------------------------
+    # ========================================================
 
     theta0_text = format_theta0(
         theta0
     )
 
+
     solver_text = " vs ".join(
         results_by_solver.keys()
     )
+
 
     title = (
         f"Monte Carlo Distribution of {label}\n"
@@ -301,57 +451,85 @@ def plot_parameter_comparison(
         f"Initial theta: {theta0_text}"
     )
 
+
     ax.set_title(
         title,
         fontsize=11
     )
 
-    # --------------------------------------------------------
+
+    # ========================================================
     # Axis labels
-    # --------------------------------------------------------
+    # ========================================================
 
     ax.set_xlabel(
         f"Estimated {label}"
     )
 
+
     if density:
+
         ax.set_ylabel(
             "Probability Density"
         )
+
     else:
+
         ax.set_ylabel(
             "Frequency"
         )
+
+
+    # ========================================================
+    # Legend
+    # ========================================================
 
     ax.legend(
         fontsize=8
     )
 
+
+    # ========================================================
+    # Grid
+    # ========================================================
+
     ax.grid(
         alpha=0.25
     )
 
+
+    # Put histogram/lines visually above grid
+    ax.set_axisbelow(
+        True
+    )
+
+
     fig.tight_layout()
 
-    # --------------------------------------------------------
+
+    # ========================================================
     # Save
-    # --------------------------------------------------------
+    # ========================================================
 
     if output_dir is not None:
+
 
         output_dir = Path(
             output_dir
         )
+
 
         output_dir.mkdir(
             parents=True,
             exist_ok=True
         )
 
+
         save_path = (
             output_dir
             / f"{parameter_name}_solver_comparison.png"
         )
+
 
         fig.savefig(
             save_path,
@@ -359,11 +537,19 @@ def plot_parameter_comparison(
             bbox_inches="tight"
         )
 
+
+    # ========================================================
+    # Show or close
+    # ========================================================
+
     if show:
+
         plt.show()
 
     else:
+
         plt.close(fig)
+
 
     return fig, ax
 
@@ -388,21 +574,42 @@ def plot_all_solver_comparisons(
 
     for parameter_name in PARAMETER_NAMES:
 
+
         if parameter_name not in true_params:
+
             raise KeyError(
                 f"true_params is missing "
                 f"{parameter_name}."
             )
 
+
         plot_parameter_comparison(
-            results_by_solver=results_by_solver,
-            parameter_name=parameter_name,
-            true_value=true_params[parameter_name],
-            theta0=theta0,
-            bins=bins,
-            output_dir=output_dir,
-            show=show,
-            density=density
+
+            results_by_solver=
+                results_by_solver,
+
+            parameter_name=
+                parameter_name,
+
+            true_value=
+                true_params[
+                    parameter_name
+                ],
+
+            theta0=
+                theta0,
+
+            bins=
+                bins,
+
+            output_dir=
+                output_dir,
+
+            show=
+                show,
+
+            density=
+                density
         )
 
 
@@ -435,14 +642,28 @@ def summarize_parameter_distribution(
         values
     )
 
+
     if values.size == 0:
+
         raise ValueError(
             "No finite estimates available."
         )
 
+
+    # ========================================================
+    # Mean
+    # ========================================================
+
     mean = np.mean(
         values
     )
+
+
+    # ========================================================
+    # Sample standard deviation
+    #
+    # ddof=1 gives the usual unbiased sample variance estimate.
+    # ========================================================
 
     if values.size > 1:
 
@@ -455,33 +676,64 @@ def summarize_parameter_distribution(
 
         std = 0.0
 
+
+    # ========================================================
+    # Bias
+    # ========================================================
+
     bias = (
         mean
         - true_value
     )
 
+
+    # ========================================================
+    # Relative and percentage bias
+    # ========================================================
+
     if true_value != 0.0:
+
 
         relative_bias = (
             bias
             / true_value
         )
 
+
         percent_bias = (
             100.0
             * relative_bias
         )
 
+
     else:
 
         relative_bias = np.nan
+
         percent_bias = np.nan
 
+
+    # ========================================================
+    # Root Mean Squared Error
+    # ========================================================
+
     rmse = np.sqrt(
+
         np.mean(
-            (values - true_value) ** 2
+
+            (
+                values
+                - true_value
+            ) ** 2
+
         )
+
     )
+
+
+    # ========================================================
+    # Return summary
+    # ========================================================
 
     return {
 
@@ -510,10 +762,14 @@ def summarize_parameter_distribution(
             rmse,
 
         "min":
-            np.min(values),
+            np.min(
+                values
+            ),
 
         "max":
-            np.max(values),
+            np.max(
+                values
+            ),
     }
 
 
@@ -531,26 +787,43 @@ def summarize_solver(
 
     summary = {}
 
+
     for parameter_name in PARAMETER_NAMES:
 
+
         if parameter_name not in results:
+
             raise KeyError(
                 f"Missing Monte Carlo result: "
                 f"{parameter_name}"
             )
 
+
         if parameter_name not in true_params:
+
             raise KeyError(
                 f"Missing true parameter: "
                 f"{parameter_name}"
             )
 
-        summary[parameter_name] = (
+
+        summary[
+            parameter_name
+        ] = (
+
             summarize_parameter_distribution(
-                results[parameter_name],
-                true_params[parameter_name]
+
+                results[
+                    parameter_name
+                ],
+
+                true_params[
+                    parameter_name
+                ]
             )
+
         )
+
 
     return summary
 
@@ -566,23 +839,32 @@ def summarize_all_solvers(
     """
     Produce Monte Carlo summaries for every solver.
 
-    Output:
+    Example output:
 
-        summary["SciPy VarPro"]["T11"]
-        summary["Preconditioned Saddle"]["T11"]
-        ...
+        summary["SciPy"]["T11"]
+
+        summary["AHU-VarPro-Saddle"]["T11"]
     """
 
     summary = {}
 
-    for solver_name, results in results_by_solver.items():
 
-        summary[solver_name] = (
+    for solver_name, results in (
+        results_by_solver.items()
+    ):
+
+
+        summary[
+            solver_name
+        ] = (
+
             summarize_solver(
                 results,
                 true_params
             )
+
         )
+
 
     return summary
 
@@ -606,6 +888,11 @@ def print_solver_summary(
         true_params
     )
 
+
+    # ========================================================
+    # Header
+    # ========================================================
+
     print(
         "\n============================================================"
     )
@@ -618,17 +905,30 @@ def print_solver_summary(
         "============================================================"
     )
 
+
+    # ========================================================
+    # Initial theta
+    # ========================================================
+
     print(
         "\nInitial theta:"
     )
 
     print(
-        np.asarray(theta0)
+        np.asarray(
+            theta0
+        )
     )
+
+
+    # ========================================================
+    # True parameters
+    # ========================================================
 
     print(
         "\nTrue parameters:"
     )
+
 
     for name in PARAMETER_NAMES:
 
@@ -637,7 +937,15 @@ def print_solver_summary(
             f"{true_params[name]:.8g}"
         )
 
-    for solver_name, solver_summary in summary.items():
+
+    # ========================================================
+    # Solver-by-solver summaries
+    # ========================================================
+
+    for solver_name, solver_summary in (
+        summary.items()
+    ):
+
 
         print(
             "\n============================================================"
@@ -651,30 +959,57 @@ def print_solver_summary(
             "============================================================"
         )
 
+
+        # ----------------------------------------------------
+        # Table header
+        # ----------------------------------------------------
+
         print(
+
             f"{'Parameter':<10}"
+
             f"{'True':>14}"
+
             f"{'Mean':>14}"
+
             f"{'Std':>14}"
+
             f"{'Bias':>14}"
+
             f"{'RMSE':>14}"
+
         )
+
 
         print(
             "-" * 80
         )
 
+
+        # ----------------------------------------------------
+        # Table rows
+        # ----------------------------------------------------
+
         for parameter_name in PARAMETER_NAMES:
+
 
             stats = solver_summary[
                 parameter_name
             ]
 
+
             print(
+
                 f"{parameter_name:<10}"
+
                 f"{stats['true']:>14.6g}"
+
                 f"{stats['mean']:>14.6g}"
+
                 f"{stats['std']:>14.6g}"
+
                 f"{stats['bias']:>14.6g}"
+
                 f"{stats['rmse']:>14.6g}"
+
             )

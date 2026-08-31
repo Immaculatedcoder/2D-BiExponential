@@ -1,3 +1,5 @@
 venv/
 mc_test_plots
 mc_two_solver_test_plots
+mc_results
+mc_results_equal_beta_vs_ahu
