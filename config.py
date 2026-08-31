@@ -22,7 +22,7 @@ SIGMA = (TRUE_PARAMS["k1"] + TRUE_PARAMS["k2"]) / SNR
 
 RANDOM_SEED = 42
 
-# Initial Start 
+# Initial Start for Saddle
 THETA0 = np.array([980.0, 2250.0, 75.0, 260.0], dtype=float)
 
 # Global bounds for theta
