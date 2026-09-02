@@ -1,5 +1,23 @@
 venv/
+
 mc_test_plots
 mc_two_solver_test_plots
 mc_results
 mc_results_equal_beta_vs_ahu
+mc_results_eq
+mc_results
+mc_results_eq500 
+mc_results_equal_beta_vs_ahu_ne
+mc_results_ne 
+mc_results_slsqp_vs_ahu
+
+# ---------------- To be removed in final version ---------
+monte_carlo_equal_beta.py
+monte_carlo.py
+optimizer_equal_beta.py 
+
+test_plotting_mc.py 
+test_saddle_noisy.py
+test_scipy_clean.py
+test_scipy_equal_beta.py
+varpro_equal_beta.py 

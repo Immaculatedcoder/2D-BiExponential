@@ -5,3 +5,13 @@ python -m venv venv (Create a Virtual Environment)
 source venv/Scripts/activate (To Activate it)
 
 pip install -r requirements.txt ( install everything in the requirements.txt file)
+
+-----------------------
+Stop Tracking
+
+git rm --cached monte_carlo_equal_beta.py
+git rm --cached monte_carlo.py
+
+------------------------------
+python monte_carlo_v2.py
+
